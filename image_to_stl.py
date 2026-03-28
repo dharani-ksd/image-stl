@@ -14,6 +14,8 @@ Options:
     --xy-scale F      Millimetres per pixel in X and Y (default: 0.5)
     --z-scale F       Maximum height in millimetres (default: 10.0)
     --base-height F   Height of the flat base in millimetres (default: 1.0)
+    --invert          Invert the heightmap so dark pixels become raised
+                      (useful for lithophanes or dark-on-light artwork)
 """
 
 import argparse
@@ -25,8 +27,17 @@ from PIL import Image
 from stl import mesh
 
 
-def image_to_heightmap(img_path: str, max_size: int = 300) -> np.ndarray:
-    """Load an image and return a 2-D float array in [0, 1]."""
+def image_to_heightmap(
+    img_path: str, max_size: int = 300, invert: bool = False
+) -> np.ndarray:
+    """Load an image and return a 2-D float array in [0, 1].
+
+    Args:
+        img_path: Path to the input image.
+        max_size: Downsample so the longest edge is at most this many pixels.
+        invert:   When True, dark pixels become raised (useful for lithophanes
+                  or dark-on-light artwork such as stamps or engravings).
+    """
     img = Image.open(img_path).convert("L")  # grayscale
 
     # Downsample so the longest edge is at most max_size pixels.
@@ -37,6 +48,8 @@ def image_to_heightmap(img_path: str, max_size: int = 300) -> np.ndarray:
     img = img.resize((new_w, new_h), Image.LANCZOS)
 
     data = np.array(img, dtype=np.float32) / 255.0  # shape: (rows, cols)
+    if invert:
+        data = 1.0 - data
     return data
 
 
@@ -196,13 +209,22 @@ def main():
         help="Flat base height in millimetres (default: 1.0)",
     )
 
+    parser.add_argument(
+        "--invert",
+        action="store_true",
+        help="Invert the heightmap so dark pixels become raised "
+             "(useful for lithophanes or dark-on-light artwork)",
+    )
+
     args = parser.parse_args()
 
     input_path = args.input_image
     output_path = args.output_stl or str(Path(input_path).with_suffix(".stl"))
 
     print(f"Loading image: {input_path}")
-    heightmap = image_to_heightmap(input_path, max_size=args.max_size)
+    heightmap = image_to_heightmap(
+        input_path, max_size=args.max_size, invert=args.invert
+    )
     rows, cols = heightmap.shape
     print(f"  Downsampled to {cols}×{rows} pixels")
 
